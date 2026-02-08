@@ -44,7 +44,6 @@ jobs:
           sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name expense-splitter-stack --capabilities CAPABILITY_IAM --resolve-s3
 
       - name: Get Stack Outputs
-        unique_id: get-outputs
         run: |
           API_URL=$(aws cloudformation describe-stacks --stack-name expense-splitter-stack --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
           USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name expense-splitter-stack --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" --output text)
