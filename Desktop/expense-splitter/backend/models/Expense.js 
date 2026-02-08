@@ -1,0 +1,11 @@
+import mongoose from "mongoose";
+
+const expenseSchema = new mongoose.Schema({
+  paidBy: String,
+  amount: Number,
+  description: String,
+  participants: [String],
+  date: { type: Date, default: Date.now },
+});
+
+export default mongoose.models.Expense || mongoose.model("Expense", expenseSchema);
