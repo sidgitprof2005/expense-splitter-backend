@@ -1,0 +1,223 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'expense-splitter-backend
+
+  Serverless backend for the Expense Splitter application.
+
+  '
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 128
+    Runtime: nodejs20.x
+    Architectures:
+    - x86_64
+Resources:
+  ExpenseSplitterTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Fn::Sub: ${AWS::StackName}-ExpenseTable
+      AttributeDefinitions:
+      - AttributeName: PK
+        AttributeType: S
+      - AttributeName: SK
+        AttributeType: S
+      - AttributeName: GSI1PK
+        AttributeType: S
+      - AttributeName: GSI1SK
+        AttributeType: S
+      KeySchema:
+      - AttributeName: PK
+        KeyType: HASH
+      - AttributeName: SK
+        KeyType: RANGE
+      GlobalSecondaryIndexes:
+      - IndexName: GSI1
+        KeySchema:
+        - AttributeName: GSI1PK
+          KeyType: HASH
+        - AttributeName: GSI1SK
+          KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+  ExpenseSplitterUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName:
+        Fn::Sub: ${AWS::StackName}-UserPool
+      UsernameAttributes:
+      - email
+      AutoVerifiedAttributes:
+      - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+  ExpenseSplitterUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName:
+        Fn::Sub: ${AWS::StackName}-WebClient
+      UserPoolId:
+        Ref: ExpenseSplitterUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_USER_SRP_AUTH
+      - ALLOW_REFRESH_TOKEN_AUTH
+  CreateGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: CreateGroupFunction
+      Handler: app.handler
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: ExpenseSplitterTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ExpenseSplitterTable
+      Events:
+        CreateGroup:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: ExpenseSplitterApi
+            Path: /groups
+            Method: post
+    Metadata:
+      SamResourceId: CreateGroupFunction
+  AddExpenseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AddExpenseFunction
+      Handler: app.handler
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: ExpenseSplitterTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ExpenseSplitterTable
+      Events:
+        AddExpense:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: ExpenseSplitterApi
+            Path: /expenses
+            Method: post
+    Metadata:
+      SamResourceId: AddExpenseFunction
+  GetSettlementsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetSettlementsFunction
+      Handler: app.handler
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: ExpenseSplitterTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ExpenseSplitterTable
+      Events:
+        GetSettlements:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: ExpenseSplitterApi
+            Path: /groups/{groupId}/settlements
+            Method: get
+    Metadata:
+      SamResourceId: GetSettlementsFunction
+  GetUserGroupsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetUserGroupsFunction
+      Handler: app.handler
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: ExpenseSplitterTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ExpenseSplitterTable
+      Events:
+        GetUserGroups:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: ExpenseSplitterApi
+            Path: /groups
+            Method: get
+    Metadata:
+      SamResourceId: GetUserGroupsFunction
+  GetGroupExpensesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetGroupExpensesFunction
+      Handler: app.handler
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: ExpenseSplitterTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ExpenseSplitterTable
+      Events:
+        GetGroupExpenses:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: ExpenseSplitterApi
+            Path: /groups/{groupId}/expenses
+            Method: get
+    Metadata:
+      SamResourceId: GetGroupExpensesFunction
+  ExpenseSplitterApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: '''*'''
+        AllowHeaders: '''*'''
+        AllowOrigin: '''*'''
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn:
+              Fn::GetAtt:
+              - ExpenseSplitterUserPool
+              - Arn
+Outputs:
+  Region:
+    Description: Region
+    Value:
+      Ref: AWS::Region
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value:
+      Ref: ExpenseSplitterUserPool
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value:
+      Ref: ExpenseSplitterUserPoolClient
+  TableName:
+    Description: DynamoDB Table Name
+    Value:
+      Ref: ExpenseSplitterTable
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${ExpenseSplitterApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/

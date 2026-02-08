@@ -1,0 +1,77 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Build and Deploy Backend
+        working-directory: ./backend
+        run: |
+          sam build
+          sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name expense-splitter-stack --capabilities CAPABILITY_IAM --resolve-s3
+
+      - name: Get Stack Outputs
+        unique_id: get-outputs
+        run: |
+          API_URL=$(aws cloudformation describe-stacks --stack-name expense-splitter-stack --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+          USER_POOL_ID=$(aws cloudformation describe-stacks --stack-name expense-splitter-stack --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" --output text)
+          USER_POOL_CLIENT_ID=$(aws cloudformation describe-stacks --stack-name expense-splitter-stack --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" --output text)
+          FRONTEND_BUCKET=$(aws cloudformation describe-stacks --stack-name expense-splitter-stack --query "Stacks[0].Outputs[?OutputKey=='FrontendBucketName'].OutputValue" --output text)
+          WEBSITE_URL=$(aws cloudformation describe-stacks --stack-name expense-splitter-stack --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text)
+          
+          echo "API_URL=$API_URL" >> $GITHUB_ENV
+          echo "VITE_API_URL=$API_URL" >> $GITHUB_ENV
+          echo "VITE_USER_POOL_ID=$USER_POOL_ID" >> $GITHUB_ENV
+          echo "VITE_USER_POOL_CLIENT_ID=$USER_POOL_CLIENT_ID" >> $GITHUB_ENV
+          echo "FRONTEND_BUCKET=$FRONTEND_BUCKET" >> $GITHUB_ENV
+          echo "WEBSITE_URL=$WEBSITE_URL" >> $GITHUB_ENV
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npm run build
+        env:
+          VITE_API_URL: ${{ env.VITE_API_URL }}
+          VITE_USER_POOL_ID: ${{ env.VITE_USER_POOL_ID }}
+          VITE_USER_POOL_CLIENT_ID: ${{ env.VITE_USER_POOL_CLIENT_ID }}
+
+      - name: Deploy Frontend to S3
+        run: |
+          aws s3 sync ./frontend/dist s3://${{ env.FRONTEND_BUCKET }} --delete
+
+      - name: Output Website URL
+        run: echo "Deployment complete! Access your app at ${{ env.WEBSITE_URL }}"

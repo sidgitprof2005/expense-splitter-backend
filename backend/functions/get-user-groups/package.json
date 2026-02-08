@@ -1,0 +1,11 @@
+{
+    "name": "get-user-groups",
+    "version": "1.0.0",
+    "description": "Get user groups lambda function",
+    "main": "app.mjs",
+    "type": "module",
+    "dependencies": {
+        "@aws-sdk/client-dynamodb": "^3.0.0",
+        "@aws-sdk/lib-dynamodb": "^3.0.0"
+    }
+}
