@@ -13,16 +13,18 @@ function App() {
 
   const [expenses, setExpenses] = useState([]);
 
+  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+
   useEffect(() => {
-    fetch("http://localhost:5000/api/expenses")
+    fetch(`${API_URL}/expenses`)
       .then((res) => res.json())
       .then((data) => setExpenses(data))
       .catch((err) => console.error("Error fetching expenses:", err));
-  }, []);
+  }, [API_URL]);
 
   const addExpense = async (expense) => {
     try {
-      const res = await fetch("http://localhost:5000/api/expenses", {
+      const res = await fetch(`${API_URL}/expenses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(expense),
@@ -37,7 +39,7 @@ function App() {
   const clearExpenses = async () => {
     if (window.confirm("Are you sure you want to clear all expenses?")) {
       try {
-        await fetch("http://localhost:5000/api/expenses", { method: "DELETE" });
+        await fetch(`${API_URL}/expenses`, { method: "DELETE" });
         setExpenses([]);
       } catch (error) {
         console.error("Error clearing expenses:", error);
